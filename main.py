@@ -1,4 +1,5 @@
 import requests
+import psycopg2
 
 
 # Класс принимает API tokenи проверяет валидность аккаунта,
@@ -49,8 +50,26 @@ class ValidateAccount():
             return False
 
 
-# Функция которая определяет сайт с которым нужно работать
-def site_definition(url: str):
-    pass
+def read_account(file_path: str):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        login = file.readline().strip()
+        password = file.readline().strip()
+        account = [login, password]
+        return account
 
-# if __name__ == '__main__':
+if __name__ == '__main__':
+    account = read_account('login.txt')
+    conn = psycopg2.connect(
+        host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
+        port='6432',
+        dbname='market_db',
+        user=account[0],
+        password=account[1],
+        target_session_attrs='read-write',
+        sslmode='verify-full'
+    )
+    q = conn.cursor()
+    q.execute('SELECT * FROM account_list')
+    res = q.fetchone()
+    print(res)
+    conn.close()
