@@ -1,6 +1,7 @@
 import requests
 import psycopg2
 import re
+import datetime
 
 
 # Класс принимает API tokenи проверяет валидность аккаунта,
@@ -8,7 +9,7 @@ import re
 # mp_id: 1- Ozon, 2-
 class ValidateAccount():
 
-    #Ready
+    # Ready
     def validate_ozon(self, client_id: str, api_key: str) -> bool:
         url = 'https://api-seller.ozon.ru/v1/warehouse/list'
         headers = {
@@ -59,32 +60,58 @@ class ValidateAccount():
         except:
             return False
 
-    #?
+    # Ready
     def validate_wildberries(self, token: str) -> bool:
         url = 'https://suppliers-api.wildberries.ru/api/v2/warehouses'
         headers = {
-            'key': token,
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                          '(KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36',
+            'Authorization': token,
             'accept': 'application/json'
         }
 
         try:
             response = requests.get(url, headers=headers)
-            if response.status_code == '200':
+            if response.status_code == 200:
                 return True
             return False
         except:
             return False
 
-    #?
-    def validate_yandex(self, campaign_id: str) -> bool:
-        url = f"https://api.partner.market.yandex.ru/v2/campaigns/{campaign_id}/outlets.json"
+    # Ready
+    def validate_wbstatistic(self, token: str) -> bool:
+        url = f'https://suppliers-stats.wildberries.ru/api/v1/supplier/incomes'
+        date = datetime.date.today()
         headers = {
-            'Content-Type': 'application/json'
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                          '(KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36',
+        }
+        params = {
+            'dateFrom': date,
+            'key': token,
+        }
+        try:
+            response = requests.get(url, headers=headers, params=params)
+            if response.status_code == 200:
+                return True
+            return False
+        except:
+            return False
+
+    # Ready
+    def validate_yandex(self, token: str, client_id: str) -> bool:
+        url = 'https://api.partner.market.yandex.ru/v2/campaigns.json'
+        headers = {
+            'Content-Type': 'application/json',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                          '(KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36',
+            'Authorization': f'OAuth oauth_token={token}, oauth_client_id={client_id}',
         }
         try:
             response = requests.get(url, headers=headers)
-            if response.status_code == '200':
+            if response.status_code == 200:
                 return True
+            return False
         except:
             return False
 
@@ -96,13 +123,23 @@ def read_account(file_path: str):
         account = [login, password]
         return account
 
+def mp_index(column_name: list):
+    for name in column_name:
+        for key, val in name.items():
+            if key == 'mp_id':
+                return val
+
+def mp_request_index(mp_id, column_name):
+    list_index = []
+    if mp_id == 1:
+        for name in column_name:
+            for key, val in name.items():
+                if key in ['client_secret_performance', 'client_id_performance']:
+                    list_index.append(val)
+
 
 if __name__ == '__main__':
-    # account = read_account('login.txt')
-    ozon = ValidateAccount()
-    res = ozon.validate_ozon('43083', 'f7c1af71-cd07-4b9a-9abe-fdfdf940db4f')
-    print(res)
-    '''
+    account = read_account('login.txt')
     conn = psycopg2.connect(
         host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
         port='6432',
@@ -112,9 +149,17 @@ if __name__ == '__main__':
         target_session_attrs='read-write',
         sslmode='verify-full'
     )
-    q = conn.cursor()
-    q.execute('SELECT * FROM account_list WHERE id = 1;')
-    res = q.fetchone()
-    print(res)
+    select = conn.cursor()
+    select.execute("select column_name,data_type from information_schema.columns "
+                   "where table_name = 'account_list';")
+    colum_name = select.fetchall()
+    name_colum = []
+    for index in range(len(colum_name)):
+        name_index = {colum_name[index][0]: index}
+        name_colum.append(name_index)
+    # select.execute("SELECT * FROM account_list")
+    # lines_table = select.fetchall()
+    # for line in lines_table:
+    #     print(line)
+    print(mp_index(name_colum))
     conn.close()
-    '''
