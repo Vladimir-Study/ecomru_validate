@@ -123,19 +123,25 @@ def read_account(file_path: str):
         account = [login, password]
         return account
 
-def mp_index(column_name: list):
-    for name in column_name:
-        for key, val in name.items():
-            if key == 'mp_id':
-                return val
 
-def mp_request_index(mp_id, column_name):
-    list_index = []
-    if mp_id == 1:
-        for name in column_name:
-            for key, val in name.items():
-                if key in ['client_secret_performance', 'client_id_performance']:
-                    list_index.append(val)
+def request_params(params_index: dict, line_table: tuple) -> dict:
+    return_params = {}
+    for key, val in params_index.items():
+        if line_table[1] == 1 and key in ['client_secret_performance',
+                                            'client_id_performance', 'client_id_api', 'api_key']:
+            if line_table[val] is not None and line_table[val] != '':
+                param = {key: line_table[val]}
+                return_params = {**return_params, **param}
+        elif line_table[1] == 2 and key in ['client_id_api', 'api_key']:
+            if line_table[val] is not None and line_table[val] != '':
+                param = {key: line_table[val]}
+                return_params = {**return_params, **param}
+        elif line_table[1] == 3 and key in ['client_id_api', 'api_key']:
+            if line_table[val] is not None and line_table[val] != '':
+                param = {key: line_table[val]}
+                return_params = {**return_params, **param}
+    if return_params != {}:
+        return return_params
 
 
 if __name__ == '__main__':
@@ -150,16 +156,46 @@ if __name__ == '__main__':
         sslmode='verify-full'
     )
     select = conn.cursor()
-    select.execute("select column_name,data_type from information_schema.columns "
-                   "where table_name = 'account_list';")
-    colum_name = select.fetchall()
-    name_colum = []
-    for index in range(len(colum_name)):
-        name_index = {colum_name[index][0]: index}
-        name_colum.append(name_index)
-    # select.execute("SELECT * FROM account_list")
-    # lines_table = select.fetchall()
-    # for line in lines_table:
-    #     print(line)
-    print(mp_index(name_colum))
+    select.execute("SELECT * FROM account_list;")
+    lines_table = select.fetchall()
+    param_index = {
+        'client_secret_performance': 2,
+        'client_id_performance': 4,
+        'client_id_api': 5,
+        'api_key': 6,
+    }
+    mp_validate = ValidateAccount()
+    for line in lines_table:
+        params_request = request_params(param_index, line)
+        if line[1] == 1 and params_request is not None: #Ozon
+            if 'client_secret_performance' in params_request.keys()\
+                    and 'api_key' in params_request.keys():
+                mp_oz_per = mp_validate.validate_ozon_performance(params_request['client_secret_performance'],
+                                                            params_request['client_id_performance'])
+                mp_oz = mp_validate.validate_ozon(params_request['client_id_api'], params_request['api_key'])
+                print(line[0], mp_oz, mp_oz_per)
+            elif 'api_key' not in params_request.keys():
+                mp_oz_per = mp_validate.validate_ozon_performance(params_request['client_secret_performance'],
+                                                            params_request['client_id_performance'])
+                print(line[0], mp_oz_per)
+            elif 'client_secret_performance' not in params_request.keys():
+                mp_oz = mp_validate.validate_ozon(params_request['client_id_api'], params_request['api_key'])
+                print(line[0], mp_oz)
+        elif line[1] == 2 and params_request is not None: #Yandex
+            mp_ya = mp_validate.validate_yandex(params_request['client_id_api'],
+                                                params_request['api_key'])
+            print(line[0], mp_ya)
+        elif line[1] == 3 and params_request is not None: #Wildberries
+            if 'client_id_api' in params_request.keys() and 'api_key' in params_request.keys():
+                mp_wb_stat = mp_validate.validate_wbstatistic(params_request['client_id_api'])
+                mp_wb = mp_validate.validate_wildberries(params_request['api_key'])
+                print(line[0], mp_wb_stat, mp_wb)
+            elif 'client_id_api' in params_request.keys():
+                mp_wb_stat = mp_validate.validate_wbstatistic(params_request['client_id_api'])
+                print(line[0], mp_wb_stat)
+            elif 'api_key' in params_request.keys():
+                mp_wb = mp_validate.validate_wildberries(params_request['api_key'])
+                print(line[0], mp_wb)
+
+
     conn.close()
