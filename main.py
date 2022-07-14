@@ -212,4 +212,8 @@ if __name__ == '__main__':
                 line_write = f"UPDATE account_list SET status_1 = '{mp_wb}' WHERE id = {line[0]};"
                 select.execute(line_write)
                 conn.commit()
+        elif params_request is None:
+            line_write = f"UPDATE account_list SET status_1 = 'Deactive', status_2 = 'Deactive' WHERE id = {line[0]};"
+            select.execute(line_write)
+            conn.commit()
     conn.close()
