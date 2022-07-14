@@ -2,6 +2,8 @@ import requests
 import psycopg2
 import re
 import datetime
+import json
+from tqdm import tqdm
 
 
 # Класс принимает API tokenи проверяет валидность аккаунта,
@@ -145,6 +147,7 @@ def request_params(params_index: dict, line_table: tuple) -> dict:
 
 
 if __name__ == '__main__':
+    save_json = {}
     account = read_account('login.txt')
     conn = psycopg2.connect(
         host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
@@ -165,7 +168,7 @@ if __name__ == '__main__':
         'api_key': 6,
     }
     mp_validate = ValidateAccount()
-    for line in lines_table:
+    for line in tqdm(lines_table):
         params_request = request_params(param_index, line)
         if line[1] == 1 and params_request is not None: #Ozon
             if 'client_secret_performance' in params_request.keys()\
@@ -173,29 +176,35 @@ if __name__ == '__main__':
                 mp_oz_per = mp_validate.validate_ozon_performance(params_request['client_secret_performance'],
                                                             params_request['client_id_performance'])
                 mp_oz = mp_validate.validate_ozon(params_request['client_id_api'], params_request['api_key'])
-                print(line[0], mp_oz, mp_oz_per)
+                add_json = {line[0]: {'mp_oz': mp_oz, 'mp_oz_per': mp_oz_per}}
+                save_json = {**save_json, **add_json}
             elif 'api_key' not in params_request.keys():
                 mp_oz_per = mp_validate.validate_ozon_performance(params_request['client_secret_performance'],
                                                             params_request['client_id_performance'])
-                print(line[0], mp_oz_per)
+                add_json = {line[0]: {'mp_oz_per': mp_oz_per}}
+                save_json = {**save_json, **add_json}
             elif 'client_secret_performance' not in params_request.keys():
                 mp_oz = mp_validate.validate_ozon(params_request['client_id_api'], params_request['api_key'])
-                print(line[0], mp_oz)
+                add_json = {line[0]: {'mp_oz': mp_oz}}
+                save_json = {**save_json, **add_json}
         elif line[1] == 2 and params_request is not None: #Yandex
             mp_ya = mp_validate.validate_yandex(params_request['client_id_api'],
                                                 params_request['api_key'])
-            print(line[0], mp_ya)
+            add_json = {line[0]: {'mp_ya': mp_ya}}
+            save_json = {**save_json, **add_json}
         elif line[1] == 3 and params_request is not None: #Wildberries
             if 'client_id_api' in params_request.keys() and 'api_key' in params_request.keys():
                 mp_wb_stat = mp_validate.validate_wbstatistic(params_request['client_id_api'])
                 mp_wb = mp_validate.validate_wildberries(params_request['api_key'])
-                print(line[0], mp_wb_stat, mp_wb)
+                add_json = {line[0]: {'mp_wb_stat': mp_wb_stat, 'mp_wb': mp_wb}}
+                save_json = {**save_json, **add_json}
             elif 'client_id_api' in params_request.keys():
                 mp_wb_stat = mp_validate.validate_wbstatistic(params_request['client_id_api'])
-                print(line[0], mp_wb_stat)
+                add_json = {line[0]: {'mp_wb_stat': mp_wb_stat}}
             elif 'api_key' in params_request.keys():
                 mp_wb = mp_validate.validate_wildberries(params_request['api_key'])
-                print(line[0], mp_wb)
-
-
+                add_json = {line[0]: {'mp_wb': mp_wb}}
+                save_json = {**save_json, **add_json}
+    with open('validate_mp.json', 'w', encoding='utf-8') as file:
+        json.dump(save_json, file)
     conn.close()
