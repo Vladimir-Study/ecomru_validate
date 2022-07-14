@@ -12,7 +12,7 @@ from tqdm import tqdm
 class ValidateAccount():
 
     # Ready
-    def validate_ozon(self, client_id: str, api_key: str) -> bool:
+    def validate_ozon(self, client_id: str, api_key: str):
         url = 'https://api-seller.ozon.ru/v1/warehouse/list'
         headers = {
             'Client-Id': client_id,
@@ -24,10 +24,10 @@ class ValidateAccount():
         try:
             response = requests.post(url, headers=headers)
             if response.status_code == 200:
-                return True
-            return False
-        except:
-            return False
+                return "Active"
+            return "Disactive"
+        except Exception as E:
+            return E
 
     def access_token(self, client_secret: str, client_id: str):
         url = 'https://performance.ozon.ru/api/client/token'
@@ -43,7 +43,7 @@ class ValidateAccount():
         return access_token[3]
 
     # Ready
-    def validate_ozon_performance(self, client_secret: str, client_id: str) -> bool:
+    def validate_ozon_performance(self, client_secret: str, client_id: str):
         access_token = self.access_token(client_secret, client_id)
         access_token = f'Bearer {access_token}'
         url = "https://performance.ozon.ru:443/api/client/campaign"
@@ -57,13 +57,13 @@ class ValidateAccount():
         try:
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
-                return True
-            return False
-        except:
-            return False
+                return "Active"
+            return "Disactive"
+        except Exception as E:
+            return E
 
     # Ready
-    def validate_wildberries(self, token: str) -> bool:
+    def validate_wildberries(self, token: str):
         url = 'https://suppliers-api.wildberries.ru/api/v2/warehouses'
         headers = {
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
@@ -75,13 +75,13 @@ class ValidateAccount():
         try:
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
-                return True
-            return False
-        except:
-            return False
+                return "Active"
+            return "Disactive"
+        except Exception as E:
+            return E
 
     # Ready
-    def validate_wbstatistic(self, token: str) -> bool:
+    def validate_wbstatistic(self, token: str):
         url = f'https://suppliers-stats.wildberries.ru/api/v1/supplier/incomes'
         date = datetime.date.today()
         headers = {
@@ -95,13 +95,13 @@ class ValidateAccount():
         try:
             response = requests.get(url, headers=headers, params=params)
             if response.status_code == 200:
-                return True
-            return False
-        except:
-            return False
+                return "Active"
+            return "Disactive"
+        except Exception as E:
+            return E
 
     # Ready
-    def validate_yandex(self, token: str, client_id: str) -> bool:
+    def validate_yandex(self, token: str, client_id: str):
         url = 'https://api.partner.market.yandex.ru/v2/campaigns.json'
         headers = {
             'Content-Type': 'application/json',
@@ -112,10 +112,10 @@ class ValidateAccount():
         try:
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
-                return True
-            return False
-        except:
-            return False
+                return "Active"
+            return "Disactive"
+        except Exception as E:
+            return E
 
 
 def read_account(file_path: str):
@@ -130,7 +130,7 @@ def request_params(params_index: dict, line_table: tuple) -> dict:
     return_params = {}
     for key, val in params_index.items():
         if line_table[1] == 1 and key in ['client_secret_performance',
-                                            'client_id_performance', 'client_id_api', 'api_key']:
+                                          'client_id_performance', 'client_id_api', 'api_key']:
             if line_table[val] is not None and line_table[val] != '':
                 param = {key: line_table[val]}
                 return_params = {**return_params, **param}
@@ -147,7 +147,6 @@ def request_params(params_index: dict, line_table: tuple) -> dict:
 
 
 if __name__ == '__main__':
-    save_json = {}
     account = read_account('login.txt')
     conn = psycopg2.connect(
         host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
@@ -170,41 +169,47 @@ if __name__ == '__main__':
     mp_validate = ValidateAccount()
     for line in tqdm(lines_table):
         params_request = request_params(param_index, line)
-        if line[1] == 1 and params_request is not None: #Ozon
-            if 'client_secret_performance' in params_request.keys()\
+        if line[1] == 1 and params_request is not None:  # Ozon
+            if 'client_secret_performance' in params_request.keys() \
                     and 'api_key' in params_request.keys():
                 mp_oz_per = mp_validate.validate_ozon_performance(params_request['client_secret_performance'],
-                                                            params_request['client_id_performance'])
+                                                                  params_request['client_id_performance'])
                 mp_oz = mp_validate.validate_ozon(params_request['client_id_api'], params_request['api_key'])
-                add_json = {line[0]: {'mp_oz': mp_oz, 'mp_oz_per': mp_oz_per}}
-                save_json = {**save_json, **add_json}
+                line_write = f"UPDATE account_list SET status_1 = '{mp_oz}', status_2 = '{mp_oz_per}' WHERE id = {line[0]};"
+                select.execute(line_write)
+                conn.commit()
             elif 'api_key' not in params_request.keys():
                 mp_oz_per = mp_validate.validate_ozon_performance(params_request['client_secret_performance'],
-                                                            params_request['client_id_performance'])
-                add_json = {line[0]: {'mp_oz_per': mp_oz_per}}
-                save_json = {**save_json, **add_json}
+                                                                  params_request['client_id_performance'])
+                line_write = f"UPDATE account_list SET status_2 = '{mp_oz_per}' WHERE id = {line[0]};"
+                select.execute(line_write)
+                conn.commit()
             elif 'client_secret_performance' not in params_request.keys():
                 mp_oz = mp_validate.validate_ozon(params_request['client_id_api'], params_request['api_key'])
-                add_json = {line[0]: {'mp_oz': mp_oz}}
-                save_json = {**save_json, **add_json}
-        elif line[1] == 2 and params_request is not None: #Yandex
+                line_write = f"UPDATE account_list SET status_1 = '{mp_oz}' WHERE id = {line[0]};"
+                select.execute(line_write)
+                conn.commit()
+        elif line[1] == 2 and params_request is not None:  # Yandex
             mp_ya = mp_validate.validate_yandex(params_request['client_id_api'],
                                                 params_request['api_key'])
-            add_json = {line[0]: {'mp_ya': mp_ya}}
-            save_json = {**save_json, **add_json}
-        elif line[1] == 3 and params_request is not None: #Wildberries
+            line_write = f"UPDATE account_list SET status_1 = '{mp_ya}' WHERE id = {line[0]};"
+            select.execute(line_write)
+            conn.commit()
+        elif line[1] == 3 and params_request is not None:  # Wildberries
             if 'client_id_api' in params_request.keys() and 'api_key' in params_request.keys():
                 mp_wb_stat = mp_validate.validate_wbstatistic(params_request['client_id_api'])
                 mp_wb = mp_validate.validate_wildberries(params_request['api_key'])
-                add_json = {line[0]: {'mp_wb_stat': mp_wb_stat, 'mp_wb': mp_wb}}
-                save_json = {**save_json, **add_json}
+                line_write = f"UPDATE account_list SET status_1 = '{mp_wb}', status_2 = '{mp_wb_stat}' WHERE id = {line[0]};"
+                select.execute(line_write)
+                conn.commit()
             elif 'client_id_api' in params_request.keys():
                 mp_wb_stat = mp_validate.validate_wbstatistic(params_request['client_id_api'])
-                add_json = {line[0]: {'mp_wb_stat': mp_wb_stat}}
+                line_write = f"UPDATE account_list SET status_2 = '{mp_wb_stat}' WHERE id = {line[0]};"
+                select.execute(line_write)
+                conn.commit()
             elif 'api_key' in params_request.keys():
                 mp_wb = mp_validate.validate_wildberries(params_request['api_key'])
-                add_json = {line[0]: {'mp_wb': mp_wb}}
-                save_json = {**save_json, **add_json}
-    with open('validate_mp.json', 'w', encoding='utf-8') as file:
-        json.dump(save_json, file)
+                line_write = f"UPDATE account_list SET status_1 = '{mp_wb}' WHERE id = {line[0]};"
+                select.execute(line_write)
+                conn.commit()
     conn.close()
