@@ -2,7 +2,6 @@ import requests
 import psycopg2
 import re
 import datetime
-import json
 from tqdm import tqdm
 
 
@@ -146,8 +145,8 @@ def request_params(params_index: dict, line_table: tuple) -> dict:
         return return_params
 
 
-if __name__ == '__main__':
-    account = read_account('login.txt')
+def set_account_status(auth_path: str):
+    account = read_account(auth_path)
     conn = psycopg2.connect(
         host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
         port='6432',
@@ -213,7 +212,11 @@ if __name__ == '__main__':
                 select.execute(line_write)
                 conn.commit()
         elif params_request is None:
-            line_write = f"UPDATE account_list SET status_1 = 'Deactive', status_2 = 'Deactive' WHERE id = {line[0]};"
+            line_write = f"UPDATE account_list SET status_1 = 'Disactive', status_2 = 'Disactive' WHERE id = {line[0]};"
             select.execute(line_write)
             conn.commit()
     conn.close()
+
+
+if __name__ == '__main__':
+    set_account_status('../login.txt')
