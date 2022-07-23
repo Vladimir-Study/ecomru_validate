@@ -1,8 +1,13 @@
+import os
+from dotenv import load_dotenv
 import requests
 import psycopg2
 import re
 import datetime
 from tqdm import tqdm
+import schedule
+
+load_dotenv()
 
 
 # Класс принимает API tokenи проверяет валидность аккаунта,
@@ -117,14 +122,6 @@ class ValidateAccount():
             return E
 
 
-def read_account(file_path: str):
-    with open(file_path, 'r', encoding='utf-8') as file:
-        login = file.readline().strip()
-        password = file.readline().strip()
-        account = [login, password]
-        return account
-
-
 def request_params(params_index: dict, line_table: tuple) -> dict:
     return_params = {}
     for key, val in params_index.items():
@@ -145,14 +142,13 @@ def request_params(params_index: dict, line_table: tuple) -> dict:
         return return_params
 
 
-def set_account_status(auth_path: str):
-    account = read_account(auth_path)
+def set_account_status():
     conn = psycopg2.connect(
         host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
         port='6432',
         dbname='market_db',
-        user=account[0],
-        password=account[1],
+        user=os.environ['DB_LOGIN'],
+        password=os.environ['DB_PASSWORD'],
         target_session_attrs='read-write',
         sslmode='verify-full'
     )
@@ -196,18 +192,18 @@ def set_account_status(auth_path: str):
             conn.commit()
         elif line[1] == 3 and params_request is not None:  # Wildberries
             if 'client_id_api' in params_request.keys() and 'api_key' in params_request.keys():
-                mp_wb_stat = mp_validate.validate_wbstatistic(params_request['client_id_api'])
-                mp_wb = mp_validate.validate_wildberries(params_request['api_key'])
+                mp_wb_stat = mp_validate.validate_wbstatistic(params_request['api_key'])
+                mp_wb = mp_validate.validate_wildberries(params_request['client_id_api'])
                 line_write = f"UPDATE account_list SET status_1 = '{mp_wb}', status_2 = '{mp_wb_stat}' WHERE id = {line[0]};"
                 select.execute(line_write)
                 conn.commit()
-            elif 'client_id_api' in params_request.keys():
-                mp_wb_stat = mp_validate.validate_wbstatistic(params_request['client_id_api'])
+            elif 'api_key' in params_request.keys():
+                mp_wb_stat = mp_validate.validate_wbstatistic(params_request['api_key'])
                 line_write = f"UPDATE account_list SET status_2 = '{mp_wb_stat}' WHERE id = {line[0]};"
                 select.execute(line_write)
                 conn.commit()
-            elif 'api_key' in params_request.keys():
-                mp_wb = mp_validate.validate_wildberries(params_request['api_key'])
+            elif 'client_id_api' in params_request.keys():
+                mp_wb = mp_validate.validate_wildberries(params_request['client_id_api'])
                 line_write = f"UPDATE account_list SET status_1 = '{mp_wb}' WHERE id = {line[0]};"
                 select.execute(line_write)
                 conn.commit()
@@ -219,4 +215,6 @@ def set_account_status(auth_path: str):
 
 
 if __name__ == '__main__':
-    set_account_status('../login.txt')
+    set_account_status()  # Запуск не по расписанию
+    # schedule.every().day.at('7:00').do(set_account_status)  # Запуск каждый день в 7:00 утра
+

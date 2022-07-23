@@ -1,11 +1,17 @@
-from pprint import pprint
 import requests
-import json
+import os
+from dotenv import load_dotenv
 
-url = 'http://127.0.0.1:5000/account/delete'
-params = {
+
+load_dotenv()
+
+
+url = 'https://api-seller.ozon.ru/v2/posting/fbo/list'
+headers = {
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                  '(KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36',
     'Content-Type': 'application/json'
 }
-response = requests.delete(url, data=json.dumps({"id": 223}), headers=params)
+response = requests.post(url, headers=headers)
 
-print(response.text)
+print(response.json())
