@@ -4,17 +4,20 @@ from pprint import pprint
 from flask import Flask
 from flask_restful import Api, Resource, reqparse
 import psycopg2
-from validate_account.validate_account import read_account
+from dotenv import load_dotenv
+import os
 
 
-def connections(auth_path: str):
-    account = read_account(auth_path)
+load_dotenv()
+
+
+def connections():
     conn = psycopg2.connect(
         host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
         port='6432',
         dbname='market_db',
-        user=account[0],
-        password=account[1],
+        user=os.environ['DB_LOGIN'],
+        password=os.environ['DB_PASSWORD'],
         target_session_attrs='read-write',
         sslmode='verify-full'
     )
@@ -150,4 +153,5 @@ api.add_resource(DeleteAccount, '/account/delete')
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000, host='127.0.0.1')
+    # app.run(debug=True, port=5000, host='127.0.0.1')
+    pass

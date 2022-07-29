@@ -1,10 +1,4 @@
-from pprint import pprint
-
 import requests
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 class MarketParser():
@@ -14,7 +8,7 @@ class MarketParser():
         'Content-Type': 'application/json'
     }
 
-    def parse_ozon_fbo(self, client_id, api_key):
+    def parse_ozon_fbo(self, client_id, api_key, date_now, date_to):
         url = 'https://api-seller.ozon.ru/v2/posting/fbo/list'
         ozon_headers = {
             'Client-Id': client_id,
@@ -24,9 +18,9 @@ class MarketParser():
         data = {
             "dir": "asc",
             "filter": {
-                "since": "2021-09-01T00:00:00.000Z",
+                "since": date_to,
                 "status": "",
-                "to": "2021-11-17T10:44:12.828Z"
+                "to": date_now
             },
             "limit": 5,
             "offset": 0,
@@ -39,7 +33,7 @@ class MarketParser():
         response = requests.post(url, json=data, headers=ozon_headers)
         return response.json()
 
-    def parse_ozon_fbs(self, client_id, api_key):
+    def parse_ozon_fbs(self, client_id, api_key, date_now, date_to):
         url = 'https://api-seller.ozon.ru/v3/posting/fbs/list'
         ozon_headers = {
             'Client-Id': client_id,
@@ -49,9 +43,9 @@ class MarketParser():
         data = {
             "dir": "ASC",
             "filter": {
-                "since": "2021-11-01T00:00:00.000Z",
+                "since": date_to,
                 "status": "awaiting_packaging",
-                "to": "2021-12-01T23:59:59.000Z"
+                "to": date_now
             },
             "limit": 100,
             "offset": 0,
@@ -64,7 +58,7 @@ class MarketParser():
         response = requests.post(url, json=data, headers=ozon_headers)
         return response.json()
 
-    def parse_wb_fbs(self, api_key: str, date_start: str, take: int, skip: int = 0):
+    def parse_wb_fbs(self, api_key: str, date_start: str, date_end: str, take: int = 100, skip: int = 0):
         url = 'https://suppliers-api.wildberries.ru/api/v2/orders'
         wb_headers = {
             'accept': 'application / json',
@@ -72,6 +66,7 @@ class MarketParser():
         }
         params = {
             'date_start': date_start,
+            'date_end': date_end,
             'take': take,
             'skip': skip
         }
@@ -89,17 +84,15 @@ class MarketParser():
         response = requests.get(url, headers=self.headers, params=params)
         return response.json()
 
-    def parse_ya(self, campaign_id: str, date_from: str, token: str, client_id: str):
-        url = f'https://api.partner.market.yandex.ru/v2/campaigns/{campaign_id}/stats/orders.json'
+    def parse_ya(self, campaign_id: str, token: str, client_id: str):
+        url = f'https://api.partner.market.yandex.ru/v2/campaigns/{campaign_id}/orders.json'
         ya_headers = {
             'Authorization': f'OAuth oauth_token={token}, oauth_client_id={client_id}',
         }
-        data = {
-            'dateFrom': date_from,
-        }
         ya_headers = {**self.headers, **ya_headers}
-        response = requests.post(url, headers=ya_headers, json=data)
+        response = requests.get(url, headers=ya_headers)
         return response.json()
 
-wb = MarketParser()
-pprint(wb.parse_ya(os.environ['CAMPAIGN_ID'], '2020-11-01', os.environ['YA_TOKEN'], os.environ['YA_CLIENT_ID']))
+
+if __name__ == '__name__':
+    pass
