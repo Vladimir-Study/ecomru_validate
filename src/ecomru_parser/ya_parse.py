@@ -1,10 +1,6 @@
-from pprint import pprint
-
 import requests
 from psycopg2 import Error
-from API_account.API import connections
-from help_func import params_date, convert_to_date, account_data
-from ecomru_parser.parser import MarketParser
+from help_func import convert_to_date, connections
 
 
 def parse_ya_order(campaign_id: str, token: str, client_id: str, order: list) -> dict:

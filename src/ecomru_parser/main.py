@@ -1,12 +1,9 @@
-from pprint import pprint
-
-from help_func import params_date, account_data
+from help_func import params_date, account_data, connections
 from ya_parse import parse_ya_order, ya_orders_params
 from wb_parse import fbs_order_params, fbo_order_params
 from ozon_parse import order_params, goods_in_order_params
-from ecomru_parser.parser import MarketParser
-from tqdm import tqdm
-import schedule
+from mp_parser import MarketParser
+from psycopg2 import Error
 
 date = params_date()
 
@@ -34,6 +31,7 @@ def send_to_db_ya() -> None:
                     order=dict_number_order
                 )
                 for index in range(len(dict_number_order)):
+                    print(f"Sending to DataBase order number: {dict_number_order[index]}")
                     ya_orders_params(ya_market_order['result']['orders'][index], params['token'])
     except Exception as E:
         print(f'Errors Yandex Market in main file: {E}')
@@ -69,5 +67,44 @@ def send_to_db_ozon_fbo() -> None:
         goods_in_order_params(ozon_fbo)
 
 
+def call_funcs_send_to_db() -> None:
+    send_to_db_ozon_fbo()
+    send_to_db_wb()
+    send_to_db_ya()
+
+
+def removing_duplicates_orders() -> None:
+    conn = connections()
+    try:
+        with conn:
+            with conn.cursor() as select:
+                select.execute("DELETE FROM goods_in_orders_table WHERE ctid IN "
+                        "(SELECT ctid FROM (SELECT *, ctid, row_number() OVER "
+                        "(PARTITION BY order_id, sku ORDER BY id DESC) FROM "
+                        "goods_in_orders_table)s WHERE row_number >= 2)"
+                        )
+                conn.commit()
+                print('Deletion of duplicates in the table of goods is completed')
+    except (Exception, Error) as E:
+        print(f"Error removing duplicates in goods table: {E}")
+
+
+def removing_duplicates_goods_in_order() -> None:
+    conn = connections()
+    try:
+        with conn:
+            with conn.cursor() as select:
+                select.execute("DELETE FROM orders_table WHERE ctid IN (SELECT ctid FROM" 
+                "(SELECT *, ctid, row_number() OVER (PARTITION BY order_id ORDER BY id DESC) "
+                "FROM orders_table)s WHERE row_number >= 2)")
+                conn.commit()
+                print('Deletion of duplicates in the table of orders is completed')
+    except (Exception, Error) as E:
+        print(f"Error removing duplicates in orders table: {E}")
+    
+
+
 if __name__ == '__main__':
-    pass
+    #call_funcs_send_to_db()
+    #removing_duplicates_orders()
+    #removing_duplicates_goods_in_order()

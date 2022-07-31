@@ -22,7 +22,7 @@ class MarketParser():
                 "status": "",
                 "to": date_now
             },
-            "limit": 5,
+            "limit": 100,
             "offset": 0,
             "translit": True,
             "with": {

@@ -1,15 +1,12 @@
-from pprint import pprint
-import os
-from help_func import params_date, convert_to_date, account_data
-from ecomru_parser.parser import MarketParser
-from API_account.API import connections
+from help_func import params_date, convert_to_date, account_data, connections
+from mp_parser import MarketParser
 from psycopg2 import Error
 
 date = params_date()
 ozon = MarketParser()
 account_ozon = account_data(1)
 ozon_fbo = ozon.parse_ozon_fbo(account_ozon[107]['client_id_api'], account_ozon[107]['api_key'], date['date_now'],
-                               date['date_to'])
+                               "2021-09-01T00:00:00.000Z")
 
 def order_params(response, api_id):
     try:
@@ -114,5 +111,6 @@ def goods_in_order_params(response):
 
 if __name__ == '__main__':
     # order_params(ozon_fbs, account_ozon[107]['api_key'])
-    pprint(ozon_fbo)
+    for order in ozon_fbo['result']:
+        print(order)
     # pass

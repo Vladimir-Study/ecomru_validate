@@ -1,8 +1,5 @@
-from pprint import pprint
 from psycopg2 import Error
-from help_func import params_date, account_data, convert_to_date
-from ecomru_parser.parser import MarketParser
-from API_account.API import connections
+from help_func import convert_to_date, connections
 
 
 def fbo_order_params(fbo_order: dict, api_key: str) -> None:
