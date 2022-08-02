@@ -22,7 +22,7 @@ class MarketParser():
                 "status": "",
                 "to": date_now
             },
-            "limit": 100,
+            "limit": 30,
             "offset": 0,
             "translit": True,
             "with": {
@@ -47,7 +47,7 @@ class MarketParser():
                 "status": "awaiting_packaging",
                 "to": date_now
             },
-            "limit": 100,
+            "limit": 30,
             "offset": 0,
             "translit": True,
             "with": {

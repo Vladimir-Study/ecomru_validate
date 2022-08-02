@@ -4,6 +4,8 @@ from wb_parse import fbs_order_params, fbo_order_params
 from ozon_parse import order_params, goods_in_order_params
 from mp_parser import MarketParser
 from psycopg2 import Error
+from pprint import pprint
+from status_update import get_status_on_db 
 
 date = params_date()
 
@@ -32,7 +34,14 @@ def send_to_db_ya() -> None:
                 )
                 for index in range(len(dict_number_order)):
                     print(f"Sending to DataBase order number: {dict_number_order[index]}")
-                    ya_orders_params(ya_market_order['result']['orders'][index], params['token'])
+                    old_status = get_status_on_db(dict_number_order[index])
+                    status_now = ya_market_order['result']['orders'][index]['status']
+                    if old_status is None or old_status != status_now:
+                        ya_orders_params(ya_market_order['result']['orders'][index], params['token'])
+                        print('Write')
+                    elif old_status == status_now:
+                        print('Rewrite')
+                        continue
     except Exception as E:
         print(f'Errors Yandex Market in main file: {E}')
 
@@ -57,14 +66,23 @@ def send_to_db_wb() -> None:
 def send_to_db_ozon_fbo() -> None:
     ozon = MarketParser()
     account_ozon = account_data(1)
+    conn = connections()
     for data_account in account_ozon.values():
         ozon_fbo = ozon.parse_ozon_fbo(data_account['client_id_api'],
                                        data_account['api_key'],
                                        date['date_now'],
                                        date['date_to']
                                        )
-        order_params(ozon_fbo, data_account['client_id_api'])
-        goods_in_order_params(ozon_fbo)
+        for order in ozon_fbo['result']:
+            old_status = get_status_on_db(order['order_id'])
+            status_now = order['status']
+            if old_status is None or old_status != status_now:
+                order_params(order)
+                goods_in_order_params(ozon_fbo)
+                print('rewrite')
+            elif old_status == status_now:
+                print('continue')
+                continue
 
 
 def call_funcs_send_to_db() -> None:
