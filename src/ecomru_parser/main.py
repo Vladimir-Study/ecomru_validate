@@ -98,7 +98,7 @@ def removing_duplicates_orders() -> None:
             with conn.cursor() as select:
                 select.execute("DELETE FROM goods_in_orders_table WHERE ctid IN "
                         "(SELECT ctid FROM (SELECT *, ctid, row_number() OVER "
-                        "(PARTITION BY order_id, sku ORDER BY id DESC) FROM "
+                        "(PARTITION BY order_id, status ORDER BY id DESC) FROM "
                         "goods_in_orders_table)s WHERE row_number >= 2)"
                         )
                 conn.commit()
@@ -114,7 +114,7 @@ def removing_duplicates_goods_in_order() -> None:
             with conn.cursor() as select:
                 select.execute("DELETE FROM orders_table WHERE ctid IN (SELECT ctid FROM" 
                 "(SELECT *, ctid, row_number() OVER (PARTITION BY order_id ORDER BY id DESC) "
-                "FROM orders_table)s WHERE row_number >= 2)")
+                "FROM orders_table, sku)s WHERE row_number >= 2)")
                 conn.commit()
                 print('Deletion of duplicates in the table of orders is completed')
     except (Exception, Error) as E:

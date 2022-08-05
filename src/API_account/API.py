@@ -34,7 +34,7 @@ class UsersStatus(Resource):
 
     def get(self, id):
         try:
-            conn = connections('../login.txt')
+            conn = connections()
             with conn:
                 with conn.cursor() as select:
                     select.execute(f"SELECT * FROM account_list WHERE id = {id};")
@@ -70,7 +70,7 @@ class AddUser(Resource):
         parser.add_argument("yandex_url", type=str)
         parser.add_argument("internal_token", type=str)
         add_params = parser.parse_args()
-        conn = connections('../login.txt')
+        conn = connections()
         with conn:
             with conn.cursor() as cursor:
                 cursor.execute(f"SELECT * FROM account_list WHERE id = {add_params['id']}")
@@ -108,7 +108,7 @@ class EditUser(Resource):
         parser.add_argument("yandex_url", type=str)
         parser.add_argument("internal_token", type=str)
         edit_params = parser.parse_args()
-        conn = connections('../login.txt')
+        conn = connections()
         with conn:
             with conn.cursor() as cursor:
                 cursor.execute(f"SELECT * FROM account_list WHERE id = {edit_params['id']}")
@@ -138,12 +138,12 @@ class DeleteAccount(Resource):
         parser = reqparse.RequestParser()
         parser.add_argument('id', type=int, required=True)
         delete_line = parser.parse_args()
-        conn = connections('../login.txt')
+        conn = connections()
         with conn:
             with conn.cursor() as cursor:
                 cursor.execute(f"DELETE FROM account_list WHERE id = {delete_line['id']};")
                 conn.commit()
-        return {f"{delete_line['id']}": 'DELETE'}
+        return {f"id: {delete_line['id']}": 'DELETE'}
 
 
 api.add_resource(UsersStatus, '/account/status/<int:id>')
@@ -153,5 +153,5 @@ api.add_resource(DeleteAccount, '/account/delete')
 
 
 if __name__ == '__main__':
-    # app.run(debug=True, port=5000, host='127.0.0.1')
-    pass
+    app.run(debug=True, port=5000, host='127.0.0.1')
+    # pass
