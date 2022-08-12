@@ -9,7 +9,7 @@ account_ozon = account_data(1)
 ozon_fbo = ozon.parse_ozon_fbo(account_ozon[107]['client_id_api'], account_ozon[107]['api_key'], date['date_now'],
                                "2021-09-01T00:00:00.000Z")
 
-def order_params(order):
+def order_params(order, api_id):
     try:
         conn = connections()
         with conn:
@@ -43,7 +43,7 @@ def order_params(order):
                 )
                 conn.commit()
     except (Exception, Error) as e:
-        print(f'Error {e}')
+        print(f'Error ozon orders {e}')
 
 
 def goods_in_order_params(order):
@@ -98,9 +98,8 @@ def goods_in_order_params(order):
                     conn.commit()
                     print('Succsess!')
     except (Exception, Error) as e:
-        print(f'Error goods in order{e}')
+        print(f'Error goods in order: {e}')
 
 
 if __name__ == '__main__':
-    #for order in ozon_fbo['result']:
     pass

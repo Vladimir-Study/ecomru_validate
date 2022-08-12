@@ -1,4 +1,5 @@
 from help_func import params_date, account_data, connections
+from return_fbo import parse_fbo_return, fbo_send_to_return_table
 from ya_parse import parse_ya_order, ya_orders_params
 from wb_parse import fbs_order_params, fbo_order_params
 from ozon_parse import order_params, goods_in_order_params
@@ -6,6 +7,9 @@ from mp_parser import MarketParser
 from psycopg2 import Error
 from pprint import pprint
 from status_update import get_status_on_db 
+from return_fbs import test 
+import asyncio 
+
 
 date = params_date()
 
@@ -64,31 +68,39 @@ def send_to_db_wb() -> None:
 
 
 def send_to_db_ozon_fbo() -> None:
-    ozon = MarketParser()
-    account_ozon = account_data(1)
-    conn = connections()
-    for data_account in account_ozon.values():
-        ozon_fbo = ozon.parse_ozon_fbo(data_account['client_id_api'],
-                                       data_account['api_key'],
-                                       date['date_now'],
-                                       date['date_to']
-                                       )
-        for order in ozon_fbo['result']:
-            old_status = get_status_on_db(order['order_id'])
-            status_now = order['status']
-            if old_status is None or old_status != status_now:
-                order_params(order)
-                goods_in_order_params(ozon_fbo)
-                print('rewrite')
-            elif old_status == status_now:
-                print('continue')
-                continue
-
+    try:
+        ozon = MarketParser()
+        account_ozon = account_data(1)
+        conn = connections()
+        for data_account in account_ozon.values():
+            #получение заказов Озон FBO
+            ozon_fbo = ozon.parse_ozon_fbo(data_account['client_id_api'],
+                                           data_account['api_key'],
+                                           date['date_now'],
+                                           date['date_to']
+                                           )
+            #парсинг вазвратов Озон FBO
+            response = parse_fbo_return(data_account['client_id_api'], data_account['api_key'])
+            for order in tqdm(response['returns']):
+                fbo_send_to_return_table(order)
+            #парсинг заказов Озон FBO
+            for order in ozon_fbo['result']:
+                old_status = get_status_on_db(order['order_id'])
+                status_now = order['status']
+                if old_status is None or old_status != status_now:
+                    order_params(order, data_account['client_id_api'])
+                    goods_in_order_params(order)
+                    print('rewrite')
+                elif old_status == status_now:
+                    print('continue')
+                    continue
+    except (Exception, Error) as E:
+        print(f'Errors Ozon FBO in main file: {E}')
 
 def call_funcs_send_to_db() -> None:
-    send_to_db_ozon_fbo()
     send_to_db_wb()
     send_to_db_ya()
+    send_to_db_ozon_fbo()
 
 
 def removing_duplicates_orders() -> None:
@@ -96,10 +108,10 @@ def removing_duplicates_orders() -> None:
     try:
         with conn:
             with conn.cursor() as select:
-                select.execute("DELETE FROM goods_in_orders_table WHERE ctid IN "
+                select.execute("DELETE FROM orders_table WHERE ctid IN "
                         "(SELECT ctid FROM (SELECT *, ctid, row_number() OVER "
                         "(PARTITION BY order_id, status ORDER BY id DESC) FROM "
-                        "goods_in_orders_table)s WHERE row_number >= 2)"
+                        "orders_table)s WHERE row_number >= 2)"
                         )
                 conn.commit()
                 print('Deletion of duplicates in the table of goods is completed')
@@ -112,9 +124,9 @@ def removing_duplicates_goods_in_order() -> None:
     try:
         with conn:
             with conn.cursor() as select:
-                select.execute("DELETE FROM orders_table WHERE ctid IN (SELECT ctid FROM" 
-                "(SELECT *, ctid, row_number() OVER (PARTITION BY order_id ORDER BY id DESC) "
-                "FROM orders_table, sku)s WHERE row_number >= 2)")
+                select.execute("DELETE FROM goods_in_orders_table WHERE ctid IN (SELECT ctid FROM" 
+                "(SELECT *, ctid, row_number() OVER (PARTITION BY order_id, sku ORDER BY id DESC) "
+                "FROM goods_in_orders_table)s WHERE row_number >= 2)")
                 conn.commit()
                 print('Deletion of duplicates in the table of orders is completed')
     except (Exception, Error) as E:
@@ -123,6 +135,6 @@ def removing_duplicates_goods_in_order() -> None:
 
 
 if __name__ == '__main__':
-    #call_funcs_send_to_db()
-    #removing_duplicates_orders()
-    #removing_duplicates_goods_in_order()
+    call_funcs_send_to_db()
+    removing_duplicates_orders()
+    removing_duplicates_goods_in_order()
