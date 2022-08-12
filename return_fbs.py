@@ -116,10 +116,9 @@ async def fbs_send_to_return_table(accounts):
 
 
 async def main_fbs(accounts):            
-    await fbo_send_to_return_table(accounts)
+    await fbs_send_to_return_table(accounts)
 
 
 if __name__ == '__main__':
-    #pass
-    asyncio.get_event_loop().run_until_complete(main_fbs(account_data))
+    pass
 

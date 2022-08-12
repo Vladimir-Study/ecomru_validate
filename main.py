@@ -7,7 +7,8 @@ from mp_parser import MarketParser
 from psycopg2 import Error
 from pprint import pprint
 from status_update import get_status_on_db 
-from return_fbs import test 
+from return_fbs import main_fbs 
+from tqdm import tqdm
 import asyncio 
 
 
@@ -94,6 +95,8 @@ def send_to_db_ozon_fbo() -> None:
                 elif old_status == status_now:
                     print('continue')
                     continue
+        # асинхронный парсинг возврата заказов Озон FBS        
+        asyncio.run(main_fbs(account_ozon))
     except (Exception, Error) as E:
         print(f'Errors Ozon FBO in main file: {E}')
 
@@ -135,6 +138,7 @@ def removing_duplicates_goods_in_order() -> None:
 
 
 if __name__ == '__main__':
-    call_funcs_send_to_db()
-    removing_duplicates_orders()
-    removing_duplicates_goods_in_order()
+    #call_funcs_send_to_db()
+    #removing_duplicates_orders()
+    #removing_duplicates_goods_in_order()
+    send_to_db_ozon_fbo()
