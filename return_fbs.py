@@ -95,21 +95,27 @@ async def fbs_send_to_return_table(accounts):
                 password=os.environ['DB_PASSWORD'],
                 ssl='verify-full'
         ) as pool:
-            return_orders = await parse_fbs_return(10, accounts)
+            # переменная chunk определяет количество возвращаемых заказов и количество Tasks 
+            chunk = 10
+            return_orders = await parse_fbs_return(chunk, accounts)
             status_orders = await get_satus_order(pool)
             tasks = []
+            count = 0
             for order in return_orders:
+                # добавляет Task если обновился статус
                 if order['id'] in status_orders.keys() and order['status'] != status_orders[order['id']]:
                     tasks.append(asyncio.create_task(make_request_update_in_db(pool, order)))
-                    print('tasks + 1')
+                # пропускает если есть такой заказ с таким статусом   
                 elif order['id'] in status_orders.keys() and order['status'] == status_orders[order['id']]:
-                    print('continue')
                     continue
+                # добавляет Task если нет такого заказа в таблице
                 else:
                     tasks.append(asyncio.create_task(make_request_insert_in_db(pool, order)))
-                    print('tasks ++1')
-            await asyncio.gather(*tasks)
-            print(len(tasks))
+            if len(tasks) == chunk or conter == len(return_orders):
+                await asyncio.gather(*tasks)
+                tasks = []
+                count += 1
+                print(count)
             print('{:.2f}'.format(time()-start))
     except Exception as E:
         print(E)
