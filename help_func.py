@@ -4,7 +4,10 @@ import os
 from psycopg2 import Error
 from pprint import pprint
 from dotenv import load_dotenv
-
+import asyncio
+import aiofiles
+from aiocsv import AsyncDictWriter, AsyncDictReader
+import csv
 load_dotenv()
 
 
@@ -83,6 +86,40 @@ def account_data(mp_id: int): # 1- ozon, 2-yandex , 3- WB
     except (Exception, Error) as E:
         print(f'Error {E}')
 
+
+async def write_csv(fieldname: list, file_name_csv: str, dict_write_csv: dict) -> None:
+    async with aiofiles.open(f'{file_name_csv}.csv', mode='w', encoding='utf-8', newline='') as file:
+        writer = AsyncDictWriter(file, fieldnames=fieldname, delimiter=';', quoting=csv.QUOTE_ALL)
+        await writer.writeheader()
+        await writer.writerows(dict_write_csv)
+
+
+async def add_in_csv(fieldname: list, file_name_csv: str, dict_write_csv: dict) -> None:
+    async with aiofiles.open(f'{file_name_csv}.csv', mode='a', encoding='utf-8', newline='') as file:
+        writer = AsyncDictWriter(file, fieldnames=fieldname, delimiter=';', quoting=csv.QUOTE_ALL)
+        await writer.writerows(dict_write_csv)
+
+
+async def read_csv(file_name_csv: str) -> None:
+    async with aiofiles.open(
+            f'{file_name_csv}.csv', 
+            mode='r', 
+            encoding='utf-8'
+            ) as file:
+        async for row in AsyncDictReader(file, delimiter=';'):
+            pprint(row)
+
+
+feidnames_return_ozon = ['id', 'clearing_id', 'posting_number', 'product_id',
+        'sku', 'status', 'returns_keeping_cost', 'return_reason_name',
+        'return_date', 'quantity', 'product_name', 'price', 
+        'waiting_for_seller_date_time', 'returned_to_seller_date_time', 
+        'last_free_waiting_day', 'is_opened', 'place_id', 'commision_percent',
+        'commisions', 'price_without_commision', 'is_moving', 
+        'moving_to_place_name', 'waiting_for_seller_days', 'picking_amount',
+        'accepted_from_customer_moment', 'picking_tag', 'status_name', 
+        'returned_to_ozon_moment', 'current_place_name', 'dst_place_name',
+        'company_id']
 
 if __name__ == '__main__':
     #res = account_data(3)
