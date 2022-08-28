@@ -4,35 +4,10 @@ import asyncio
 import os
 import asyncpg
 import aiohttp
-from dotenv import load_dotenv
-from time import time
-load_dotenv()
+import json
 
 
-async def parse_fbs_return(limit: int, account_dict: dict):
-    return_orders = []
-    async with aiohttp.ClientSession() as session:
-        tasks = []
-        chunk = 3
-        count = 0
-        for account in account_dict.values():
-            count += 1
-            tasks.append(asyncio.create_task(make_request_in_site(
-                session,
-                account['client_id_api'],
-                account['api_key'],
-                limit
-            )))
-            if len(tasks) == chunk or count == len(account_dict):
-                await_res = await asyncio.gather(*tasks)
-                for _ in await_res:
-                    for i in _['result']['returns']:
-                        return_orders.append(i)
-                tasks = []
-    return return_orders
-
-
-async def make_request_in_site(session, client_id: str, api_key: str, limit: int):
+async def parse_fbs_return_in_json(client_id: str, api_key: str, limit: int = 100):
     URL = 'https://api-seller.ozon.ru/v2/returns/company/fbs'
     headers = {
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
@@ -45,8 +20,35 @@ async def make_request_in_site(session, client_id: str, api_key: str, limit: int
         "limit": limit,
         "offset": 0,
     }
-    async with session.post(URL, json=data, headers=headers) as response:
-        return await response.json()
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(URL, json=data, headers=headers) as response:
+                orders = await response.json()
+                print(f"Number of ofders for parsing: {len(orders['result']['returns'])}")
+                with open('returns_ozon.json', 'r', encoding='utf-8') as file:
+                    returns = json.load(file)
+                    for _ in orders['result']['returns']:
+                        returns['returns'].append(_)
+                    with open('returns_ozon.json', 'w', encoding='utf-8') as outfile:
+                        json.dump(returns, outfile, ensure_ascii=False, indent=4)
+        except Exception as E:
+            print(f'Error get return orders Ozon FBS: {E}')
+
+
+async def get_chunk_fbs(account_list: dict) -> None:
+        tasks = []
+        chunk = 3
+        count = 0
+        for key, account in account_list.items():
+            count += 1
+            tasks.append(asyncio.create_task(parse_fbs_return_in_json(
+                account['client_id_api'],
+                account['api_key'],
+                100
+            )))
+            if len(tasks) == chunk or count == len(account_list):
+                await asyncio.gather(*tasks)
+                tasks = []
 
 
 async def make_request_insert_in_db(pool, order):
@@ -84,45 +86,15 @@ async def get_satus_order(pool):
         return records_status    
 
 
-async def fbs_send_to_return_table(accounts):
+async def fbs_send_to_return_table(order, status_orders, pool):
     try:
-        start = time()
-        async with asyncpg.create_pool(
-                host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
-                port='6432',
-                database='market_db',
-                user=os.environ['DB_LOGIN'],
-                password=os.environ['DB_PASSWORD'],
-                ssl='verify-full'
-        ) as pool:
-            # переменная chunk определяет количество возвращаемых заказов и количество Tasks 
-            chunk = 10
-            return_orders = await parse_fbs_return(chunk, accounts)
-            status_orders = await get_satus_order(pool)
-            tasks = []
-            count = 0
-            for order in return_orders:
-                # добавляет Task если обновился статус
-                if order['id'] in status_orders.keys() and order['status'] != status_orders[order['id']]:
-                    tasks.append(asyncio.create_task(make_request_update_in_db(pool, order)))
-                # пропускает если есть такой заказ с таким статусом   
-                elif order['id'] in status_orders.keys() and order['status'] == status_orders[order['id']]:
-                    continue
-                # добавляет Task если нет такого заказа в таблице
-                else:
-                    tasks.append(asyncio.create_task(make_request_insert_in_db(pool, order)))
-            if len(tasks) == chunk or conter == len(return_orders):
-                await asyncio.gather(*tasks)
-                tasks = []
-                count += 1
-                print(count)
-            print('{:.2f}'.format(time()-start))
+        if order['id'] in status_orders.keys() and order['status'] != status_orders['status']:
+            task = asyncio.create_task(make_request_update_in_db(pool, order))
+        elif order['id'] not in status_orders.keys():
+            task = asyncio.create_task(make_request_insert_in_db(pool, order))
+        return task
     except Exception as E:
         print(E)
-
-
-async def main_fbs(accounts):            
-    await fbs_send_to_return_table(accounts)
 
 
 if __name__ == '__main__':

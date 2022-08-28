@@ -5,8 +5,6 @@ from psycopg2 import Error
 from pprint import pprint
 from dotenv import load_dotenv
 import asyncio
-import aiofiles
-from aiocsv import AsyncDictWriter, AsyncDictReader
 import csv
 load_dotenv()
 
@@ -19,7 +17,7 @@ def connections():
         user=os.environ['DB_LOGIN'],
         password=os.environ['DB_PASSWORD'],
         target_session_attrs='read-write',
-        sslmode='verify-full'
+        sslmode='require'
     )
     return conn
 
@@ -85,29 +83,6 @@ def account_data(mp_id: int): # 1- ozon, 2-yandex , 3- WB
                     return return_dict
     except (Exception, Error) as E:
         print(f'Error {E}')
-
-
-async def write_csv(fieldname: list, file_name_csv: str, dict_write_csv: dict) -> None:
-    async with aiofiles.open(f'{file_name_csv}.csv', mode='w', encoding='utf-8', newline='') as file:
-        writer = AsyncDictWriter(file, fieldnames=fieldname, delimiter=';', quoting=csv.QUOTE_ALL)
-        await writer.writeheader()
-        await writer.writerows(dict_write_csv)
-
-
-async def add_in_csv(fieldname: list, file_name_csv: str, dict_write_csv: dict) -> None:
-    async with aiofiles.open(f'{file_name_csv}.csv', mode='a', encoding='utf-8', newline='') as file:
-        writer = AsyncDictWriter(file, fieldnames=fieldname, delimiter=';', quoting=csv.QUOTE_ALL)
-        await writer.writerows(dict_write_csv)
-
-
-async def read_csv(file_name_csv: str) -> None:
-    async with aiofiles.open(
-            f'{file_name_csv}.csv', 
-            mode='r', 
-            encoding='utf-8'
-            ) as file:
-        async for row in AsyncDictReader(file, delimiter=';'):
-            pprint(row)
 
 
 feidnames_return_ozon = ['id', 'clearing_id', 'posting_number', 'product_id',

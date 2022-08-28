@@ -1,18 +1,19 @@
 from help_func import params_date, account_data, connections
-from return_fbo import parse_fbo_return, fbo_send_to_return_table
+from return_fbo import get_chunk, fbo_send_to_return_table
 from ya_parse import parse_ya_order, ya_orders_params
 from wb_parse import fbs_order_params, fbo_order_params
-from ozon_parse import order_params, goods_in_order_params
 from mp_parser import MarketParser
 from psycopg2 import Error
-from pprint import pprint
-from status_update import get_status_on_db 
-from return_fbs import main_fbs 
-from tqdm import tqdm
-import asyncio 
-
+import asyncpg
+from status_update import get_status_on_db
+from return_fbs import get_chunk_fbs, get_satus_order, fbs_send_to_return_table
+from dotenv import load_dotenv
+import os
+import asyncio
+import json
 
 date = params_date()
+load_dotenv()
 
 
 def send_to_db_ya() -> None:
@@ -72,19 +73,20 @@ def send_to_db_ozon_fbo() -> None:
     try:
         ozon = MarketParser()
         account_ozon = account_data(1)
+        '''
         conn = connections()
         for data_account in account_ozon.values():
-            #получение заказов Озон FBO
+            # получение заказов Озон FBO
             ozon_fbo = ozon.parse_ozon_fbo(data_account['client_id_api'],
                                            data_account['api_key'],
                                            date['date_now'],
                                            date['date_to']
                                            )
-            #парсинг вазвратов Озон FBO
+            # парсинг вазвратов Озон FBO
             response = parse_fbo_return(data_account['client_id_api'], data_account['api_key'])
             for order in tqdm(response['returns']):
                 fbo_send_to_return_table(order)
-            #парсинг заказов Озон FBO
+            # парсинг заказов Озон FBO
             for order in ozon_fbo['result']:
                 old_status = get_status_on_db(order['order_id'])
                 status_now = order['status']
@@ -95,10 +97,47 @@ def send_to_db_ozon_fbo() -> None:
                 elif old_status == status_now:
                     print('continue')
                     continue
-        # асинхронный парсинг возврата заказов Озон FBS        
-        asyncio.run(main_fbs(account_ozon))
+        '''
+        # асинхронный парсинг возврата заказов Озон FBS
+        async def returns_orders(account_list: dict) -> None:
+            await get_chunk(account_list)
+            await get_chunk_fbs(account_list)
+            async with asyncpg.create_pool(
+                    host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
+                    port='6432',
+                    database='market_db',
+                    user=os.environ['DB_LOGIN'],
+                    password=os.environ['DB_PASSWORD'],
+                    ssl='require'
+            ) as pool:
+                status_in_db = await get_satus_order(pool)
+                with open('returns_ozon.json', 'r', encoding='utf-8') as file:
+                    return_orders = json.load(file)
+                    tasks = []
+                    chunk = 100
+                    for order in return_orders['returns']:
+                        if len(order) == 11:
+                            task = await fbo_send_to_return_table(order, status_in_db, pool)
+                            tasks.append(task)
+                        elif len(order) == 26:
+                            task = await fbs_send_to_return_table(order, status_in_db, pool)
+                            tasks.append(task)
+                    while len(tasks) != 0:
+                        print(f'Numbers of orders for recordins: {len(tasks)}')
+                        chunk_tasks = tasks[:chunk]
+                        await asyncio.gather(*chunk_tasks)
+                        tasks = tasks[chunk:]
+                    return_orders['returns'].clear()
+                    with open('returns_ozon.json', 'w', encoding='utf-8') as outfile:
+                        json.dump(return_orders, outfile, ensure_ascii=False, indent=4)
+                async with pool.acquire() as conn:
+                    conn.execute('DELETE FROM return_table WHERE ctid IN (SELECT ctid FROM(SELECT *, ctid, '
+                                 'row_number() OVER (PARTITION BY return_id ORDER BY id DESC) FROM return_table)s '
+                                 'WHERE row_number >= 2)')
+        asyncio.get_event_loop().run_until_complete(returns_orders(account_ozon))
     except (Exception, Error) as E:
         print(f'Errors Ozon FBO in main file: {E}')
+
 
 def call_funcs_send_to_db() -> None:
     send_to_db_wb()
@@ -112,10 +151,10 @@ def removing_duplicates_orders() -> None:
         with conn:
             with conn.cursor() as select:
                 select.execute("DELETE FROM orders_table WHERE ctid IN "
-                        "(SELECT ctid FROM (SELECT *, ctid, row_number() OVER "
-                        "(PARTITION BY order_id, status ORDER BY id DESC) FROM "
-                        "orders_table)s WHERE row_number >= 2)"
-                        )
+                               "(SELECT ctid FROM (SELECT *, ctid, row_number() OVER "
+                               "(PARTITION BY order_id, status ORDER BY id DESC) FROM "
+                               "orders_table)s WHERE row_number >= 2)"
+                               )
                 conn.commit()
                 print('Deletion of duplicates in the table of goods is completed')
     except (Exception, Error) as E:
@@ -127,18 +166,17 @@ def removing_duplicates_goods_in_order() -> None:
     try:
         with conn:
             with conn.cursor() as select:
-                select.execute("DELETE FROM goods_in_orders_table WHERE ctid IN (SELECT ctid FROM" 
-                "(SELECT *, ctid, row_number() OVER (PARTITION BY order_id, sku ORDER BY id DESC) "
-                "FROM goods_in_orders_table)s WHERE row_number >= 2)")
+                select.execute("DELETE FROM goods_in_orders_table WHERE ctid IN (SELECT ctid FROM"
+                               "(SELECT *, ctid, row_number() OVER (PARTITION BY order_id, sku ORDER BY id DESC) "
+                               "FROM goods_in_orders_table)s WHERE row_number >= 2)")
                 conn.commit()
                 print('Deletion of duplicates in the table of orders is completed')
     except (Exception, Error) as E:
         print(f"Error removing duplicates in orders table: {E}")
-    
 
 
 if __name__ == '__main__':
-    #call_funcs_send_to_db()
-    #removing_duplicates_orders()
-    #removing_duplicates_goods_in_order()
+    # call_funcs_send_to_db()
+    # removing_duplicates_orders()
+    # removing_duplicates_goods_in_order()
     send_to_db_ozon_fbo()
