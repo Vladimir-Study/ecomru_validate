@@ -1,6 +1,7 @@
 import requests
-from psycopg2 import Error
 from help_func import convert_to_date, connections
+import asyncio
+import asyncpg
 
 
 def parse_ya_order(campaign_id: str, token: str, client_id: str, order: list) -> dict:
@@ -18,34 +19,37 @@ def parse_ya_order(campaign_id: str, token: str, client_id: str, order: list) ->
     return response.json()
 
 
-def ya_orders_params(order: dict, api_id: str) -> None:
+async def set_order_ya(order: dict, api_id: str, pool):
     try:
-        ya_conn = connections()
-        with ya_conn:
-            with ya_conn.cursor() as select:
-                select.execute(
-                    f"INSERT INTO orders_table (order_id, status, created_at, in_process_at,"
-                    f"city, payment_type_group_name, warehouse_id, warehouse_name, api_id, mp_id) "
-                    f"VALUES ('{order['id']}', '{order['status']}', "
-                    f"'{order['creationDate']}', '{convert_to_date(order['statusUpdateDate'])}', "
-                    f"'{order['deliveryRegion']['name']}', '{order['paymentType']}', '{order['items'][0]['warehouse']['id']}', "
-                    f"'{order['items'][0]['warehouse']['name']}', '{api_id}', 2)"
-                )
-                ya_conn.commit()
-                order_prices = order['items'][0]['prices']
-                if len(order_prices) >= 1:
-                    for order_price in order_prices:
-                        if order_price['type'] == 'BUYER':
-                            select.execute(
-                                f"INSERT INTO goods_in_orders_table (order_id, sku, unit_name, quantity, "
-                                f"offer_id, price, unit_price)"
-                                f"VALUES ('{order['id']}', '{order['items'][0]['marketSku']}', '{order['items'][0]['offerName']}', "
-                                f"{order['items'][0]['count']}, '{order['items'][0]['shopSku']}', {order_price['total']}, "
-                                f"{order_price['costPerItem']})"
-                            )
-                            ya_conn.commit()
-    except (Exception, Error) as E:
-        print(f'Error: {E}')
+        await pool.execute(
+            '''INSERT INTO orders_table (order_id, status, created_at, 
+            city, payment_type_group_name, api_id, mp_id) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)''', order['id'], 
+            order['status'], order['creationDate'], 
+            order['delivery']['region']['name'], order['paymentType'], 
+            api_id, 2
+        )
+    except Exception as E:
+        print(f'Error in send ORDER to Data Base Yandex: {E}')
+
+
+async def set_good_ya(order: dict, pool): 
+    try:
+        order_prices = order['items'][0]['price']
+        if len(order_prices) >= 1:
+            for order_price in order_prices:
+                if order_price['type'] == 'BUYER':
+                    await pool.execute(
+                        '''INSERT INTO goods_in_orders_table (order_id, sku, 
+                        unit_name, quantity, offer_id, price, unit_price) 
+                        VALUES ($1, $2, $3, $4, $5, $6, $7)''', order['id'],
+                        order['items'][0]['marketSku'], 
+                        order['items'][0]['offerName'], order['items'][0]['count'],
+                        order['items'][0]['shopSku'], order_price['total'], 
+                        order_price['costPerItem']
+                    )
+    except Exception as E:
+        print(f'Error in send GOOD to Data Base Yandex: {E}')
 
 
 if __name__ == '__main__':

@@ -1,47 +1,37 @@
-from psycopg2 import Error
-from help_func import convert_to_date, connections
+from help_func import convert_to_date
 
 
-def fbo_order_params(fbo_order: dict, api_key: str) -> None:
+async def fbo_order_params(order: dict, api_key: str, pool) -> None:
     try:
-        fbo_conn = connections()
-        with fbo_conn:
-            with fbo_conn.cursor() as fbo_select:
-                fbo_select.execute(f"INSERT INTO orders_table (order_id, created_at, "
-                                   f"region, warehouse_name, api_id, mp_id) "
-                                   f"VALUES ('{fbo_order['gNumber']}', '{convert_to_date(fbo_order['date'])}', "
-                                   f"'{fbo_order['oblast']}', '{fbo_order['warehouseName']}', '{api_key}', 3)"
-                                   )
-                fbo_conn.commit()
-                fbo_select.execute(f"INSERT INTO goods_in_orders_table (order_id, sku, offer_id, price) "
-                                   f"VALUES ('{fbo_order['gNumber']}' , '{fbo_order['nmId']}', "
-                                   f"'{fbo_order['supplierArticle']}', {fbo_order['totalPrice']})"
-                                   )
-                fbo_conn.commit()
-    except (Exception, Error) as E:
-        print(f'Error: {E}')
+        await pool.execute('''INSERT INTO orders_table (order_id, created_at, 
+                           region, warehouse_name, api_id, mp_id) 
+                           VALUES ($1, $2, $3, $4, $5, $6)''', order['gNumber'],
+                           convert_to_date(order['date']), order['oblast'],
+                           order['warehouseName'], api_key, 3
+                           )
+        await pool.execute('''INSERT INTO goods_in_orders_table (order_id, sku, offer_id, price)
+                           VALUES ($1, $2, $3, $4)''', order['gNumber'], str(order['nmId']),
+                           order['supplierArticle'], order['totalPrice']
+                           )
+    except (Exception) as E:
+        print(f'Error in send FBO orders WB in DB: {E}')
 
 
-def fbs_order_params(fbs_order: dict, api_key: str) -> None:
+async def fbs_order_params(order: dict, api_key: str, pool) -> None:
     try:
-        fbs_conn = connections()
-        with fbs_conn:
-            with fbs_conn.cursor() as fbs_select:
-                fbs_select.execute(
-                    f"INSERT INTO orders_table (order_id, created_at, city, delivery_type, "
-                    f"warehouse_id, api_id, mp_id) "
-                    f"VALUES ('{fbs_order['orderId']}', '{convert_to_date(fbs_order['dateCreated'])}', "
-                    f"'{fbs_order['deliveryAddressDetails']['city']}', '{fbs_order['deliveryType']}', '{fbs_order['wbWhId']}', "
-                    f"'{api_key}', 3)"
-                )
-                fbs_conn.commit()
-                fbs_select.execute(
-                    f"INSERT INTO goods_in_orders_table (order_id, sku) "
-                    f"VALUES ('{fbs_order['orderId']}', {fbs_order['chrtId']})"
-                )
-                fbs_conn.commit()
-    except (Exception, Error) as E:
-        print(f'Error: {E}')
+        await pool.execute(
+            '''INSERT INTO orders_table (order_id, created_at, city, delivery_type,
+            warehouse_id, api_id, mp_id) VALUES ($1, $2, $3, $4, $5, $6, $7)''',
+            order['orderId'], convert_to_date(order['dateCreated']), 
+            order['deliveryAddressDetails']['city'], order['deliveryType'],
+            order['wbWhId'], api_key, 3
+        )
+        await pool.execute(
+            '''INSERT INTO goods_in_orders_table (order_id, sku) 
+            VALUES ($1, $2)''', order['orderId'], order['chrtId']
+        )
+    except Exception as E:
+        print(f'Error in send FBS orders WB in DB: {E}')
 
 
 if __name__ == '__main__':

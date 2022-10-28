@@ -66,23 +66,14 @@ def account_data(mp_id: int): # 1- ozon, 2-yandex , 3- WB
                 elif mp_id == 3:
                     for line in select_result_db:
                         if line[9] == 'Active' and line[12] == 'Active':
-                            if line[6] in [values['key'] for values in return_dict.values()]:
-                                continue
-                            else:
-                                return_dict[line[0]] = {'api_key': line[5], 'key': line[6]}
+                            return_dict[line[0]] = {'api_key': line[5], 'key': line[6]}
                         elif line[9] != 'Active' and line[12] == 'Active':
-                            if line[6] in [values['key'] for values in return_dict.values()]:
-                                continue
-                            else:
-                                return_dict[line[0]] = {'key': line[6]}
+                            return_dict[line[0]] = {'key': line[6]}
                         elif line[9] == 'Active' and line[12] != 'Active':
-                            if line[5] in [values['api_key'] for values in return_dict.values()]:
-                                continue
-                            else:
-                                return_dict[line[0]] = {'api_key': line[5]}
+                            return_dict[line[0]] = {'api_key': line[5]}
                     return return_dict
     except (Exception, Error) as E:
-        print(f'Error {E}')
+        print(f'Error in get account data: {E}')
 
 
 feidnames_return_ozon = ['id', 'clearing_id', 'posting_number', 'product_id',

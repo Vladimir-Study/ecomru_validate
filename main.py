@@ -1,12 +1,11 @@
 from help_func import params_date, account_data, connections
-from return_fbo import get_chunk, fbo_send_to_return_table
-from ya_parse import parse_ya_order, ya_orders_params
+from mp_parser import parse_ozon_fbo, parse_ya, parse_wb_fbs, parse_wb_fbo
+from ozon_parse import order_params, goods_in_order_params
+from ya_parse import set_order_ya, set_good_ya
 from wb_parse import fbs_order_params, fbo_order_params
-from mp_parser import MarketParser
-from psycopg2 import Error
+import datetime
 import asyncpg
 from status_update import get_status_on_db
-from return_fbs import get_chunk_fbs, get_satus_order, fbs_send_to_return_table
 from dotenv import load_dotenv
 import os
 import asyncio
@@ -16,126 +15,155 @@ date = params_date()
 load_dotenv()
 
 
-def send_to_db_ya() -> None:
+async def send_to_db_ya() -> None:
     try:
+        date_now = datetime.datetime.today()
+        delta = datetime.timedelta(weeks=4)
+        date_to = date_now - delta 
+        date_now = date_now.strftime('%d-%m-%Y')
+        date_to = date_to.strftime('%d-%m-%Y')
         ya_market_account_list = account_data(2)
-        ya_market = MarketParser()
         for params in ya_market_account_list.values():
-            ya_market_orders = ya_market.parse_ya(
-                params['campaign_id'],
-                params['token'],
-                params['client_id']
-            )
-            if 'errors' in ya_market_orders.keys():
-                print(ya_market_orders['errors'][0]['message'])
-            elif len(ya_market_orders['orders']) == 0:
-                print('Numbers of orders in 0')
-            else:
-                dict_number_order = [order['id'] for order in ya_market_orders['orders']]
-                ya_market_order = parse_ya_order(
+            ya_market_orders = await parse_ya(
                     params['campaign_id'],
                     params['token'],
                     params['client_id'],
-                    order=dict_number_order
-                )
-                for index in range(len(dict_number_order)):
-                    print(f"Sending to DataBase order number: {dict_number_order[index]}")
-                    old_status = get_status_on_db(dict_number_order[index])
-                    status_now = ya_market_order['result']['orders'][index]['status']
-                    if old_status is None or old_status != status_now:
-                        ya_orders_params(ya_market_order['result']['orders'][index], params['token'])
-                        print('Write')
-                    elif old_status == status_now:
-                        print('Rewrite')
-                        continue
+                    date_now,
+                    date_to
+            )
+        '''
+        async with asyncpg.create_pool(
+                host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
+                port='6432',
+                database='market_db',
+                user=os.environ['DB_LOGIN'],
+                password=os.environ['DB_PASSWORD'],
+                ssl='require'
+        ) as pool:
+            with open('orders_ya.json', 'r', encoding='utf-8') as file:
+                return_orders = json.load(file)
+                print(len(return_orders))
+                for client_id, orders in return_orders.items():
+                    tasks = []
+                    pended = 0
+                    chunk = 1000
+                    for order in orders:
+                        task = asyncio.create_task(set_order_ya(order, client_id, pool))
+                        tasks.append(task)
+                        task = asyncio.create_task(set_good_ya(order, pool))
+                        tasks.append(task)
+                        if len(tasks) == chunk or pended == len(orders) or len(orders) < chunk:
+                            print(f'Numbers of orders for recordins: {len(tasks)}')
+                            await asyncio.gather(*tasks)
+                            pended += len(tasks)
+                            tasks = []
+            if os.path.isfile('orders_ozon_fbo.json'):
+                os.remove('orders_ozon_fbo.json')
+                print('File remove!')
+        '''
     except Exception as E:
         print(f'Errors Yandex Market in main file: {E}')
 
 
-def send_to_db_wb() -> None:
+async def send_to_db_wb() -> None:
     try:
         wb_account_list = account_data(3)
-        wb = MarketParser()
         for wb_account in wb_account_list.values():
             if 'api_key' in wb_account:
-                goods_list = wb.parse_wb_fbs(wb_account['api_key'], date['date_to'], date['date_now'])
-                for goods in goods_list['orders']:
-                    fbs_order_params(goods, wb_account['api_key'])
+                await parse_wb_fbs(wb_account['api_key'], date['date_to'], date['date_now'])
             if 'key' in wb_account:
-                goods_list = wb.parse_wb_fbo(wb_account['key'], date['date_to'])
-                for goods in goods_list:
-                    fbo_order_params(goods, wb_account['key'])
+                goods_list = await parse_wb_fbo(wb_account['key'], date['date_to'])
+        async with asyncpg.create_pool(
+                host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
+                port='6432',
+                database='market_db',
+                user=os.environ['DB_LOGIN'],
+                password=os.environ['DB_PASSWORD'],
+                ssl='require'
+        ) as pool:
+            file_name = ['orders_wb_fbo', 'orders_wb_fbs']
+            for file in file_name:
+                print(file)
+                with open(f'{file}.json', 'r', encoding='utf-8') as file:
+                    return_orders = json.load(file)
+                    print(len(return_orders))
+                    for client_id, orders in return_orders.items():
+                        print(orders)
+                        tasks = []
+                        pended = 0
+                        chunk = 1000
+                        for order in orders:
+                            if file == 'orders_wb_fbs':
+                                print('FBS')
+                                task = asyncio.create_task(fbs_order_params(order, client_id, pool))
+                            else:
+                                print('FBO')
+                                task = asyncio.create_task(fbo_order_params(order, client_id, pool))
+                            tasks.append(task)
+                            if len(tasks) == chunk or pended == len(orders) or len(orders) < chunk:
+                                print(f'Numbers of orders for recordins: {len(tasks)}')
+                                await asyncio.gather(*tasks)
+                                pended += len(tasks)
+                                tasks = []
+                if os.path.isfile(f'{file}.json'):
+                    os.remove(f'{file}.json')
+                    print('File remove!')
     except Exception as E:
         print(f'Errors Wildberries in main file: {E}')
 
 
-def send_to_db_ozon_fbo() -> None:
+async def send_to_db_ozon_fbo() -> None:
     try:
-        ozon = MarketParser()
         account_ozon = account_data(1)
-        '''
-        conn = connections()
+        # асинхронный парсинг возврата заказов Озон FBO
         for data_account in account_ozon.values():
-            # получение заказов Озон FBO
-            ozon_fbo = ozon.parse_ozon_fbo(data_account['client_id_api'],
-                                           data_account['api_key'],
-                                           date['date_now'],
-                                           date['date_to']
-                                           )
-            # парсинг вазвратов Озон FBO
-            response = parse_fbo_return(data_account['client_id_api'], data_account['api_key'])
-            for order in tqdm(response['returns']):
-                fbo_send_to_return_table(order)
-            # парсинг заказов Озон FBO
-            for order in ozon_fbo['result']:
-                old_status = get_status_on_db(order['order_id'])
-                status_now = order['status']
-                if old_status is None or old_status != status_now:
-                    order_params(order, data_account['client_id_api'])
-                    goods_in_order_params(order)
-                    print('rewrite')
-                elif old_status == status_now:
-                    print('continue')
-                    continue
-        '''
-        # асинхронный парсинг возврата заказов Озон FBS
-        async def returns_orders(account_list: dict) -> None:
-            await get_chunk(account_list)
-            await get_chunk_fbs(account_list)
-            async with asyncpg.create_pool(
-                    host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
-                    port='6432',
-                    database='market_db',
-                    user=os.environ['DB_LOGIN'],
-                    password=os.environ['DB_PASSWORD'],
-                    ssl='require'
-            ) as pool:
-                status_in_db = await get_satus_order(pool)
-                with open('returns_ozon.json', 'r', encoding='utf-8') as file:
-                    return_orders = json.load(file)
+            await parse_ozon_fbo(data_account['client_id_api'],
+                                 data_account['api_key'],
+                                 date['date_now'],
+                                 date['date_to'])
+            print(f"End parse {data_account['api_key']}")
+        async with asyncpg.create_pool(
+                host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
+                port='6432',
+                database='market_db',
+                user=os.environ['DB_LOGIN'],
+                password=os.environ['DB_PASSWORD'],
+                ssl='require'
+        ) as pool:
+            with open('orders_ozon_fbo.json', 'r', encoding='utf-8') as file:
+                return_orders = json.load(file)
+                chunk = 1000
+                for api_id, orders in return_orders.items():
+                    print(len(orders))
                     tasks = []
-                    chunk = 100
-                    for order in return_orders['returns']:
-                        if len(order) == 11:
-                            task = await fbo_send_to_return_table(order, status_in_db, pool)
-                            tasks.append(task)
-                        elif len(order) == 26:
-                            task = await fbs_send_to_return_table(order, status_in_db, pool)
-                            tasks.append(task)
-                    while len(tasks) != 0:
-                        print(f'Numbers of orders for recordins: {len(tasks)}')
-                        chunk_tasks = tasks[:chunk]
-                        await asyncio.gather(*chunk_tasks)
-                        tasks = tasks[chunk:]
-                    return_orders['returns'].clear()
-                    with open('returns_ozon.json', 'w', encoding='utf-8') as outfile:
-                        json.dump(return_orders, outfile, ensure_ascii=False, indent=4)
-                async with pool.acquire() as conn:
-                    conn.execute('DELETE FROM return_table WHERE ctid IN (SELECT ctid FROM(SELECT *, ctid, '
-                                 'row_number() OVER (PARTITION BY return_id ORDER BY id DESC) FROM return_table)s '
-                                 'WHERE row_number >= 2)')
-        asyncio.get_event_loop().run_until_complete(returns_orders(account_ozon))
-    except (Exception, Error) as E:
+                    pended = 0
+                    for order in orders:
+                        task = asyncio.create_task(goods_in_order_params(order, pool))
+                        print(task)
+                        tasks.append(task)
+                        task = asyncio.create_task(order_params(order, api_id, pool))
+                        tasks.append(task)
+                        if len(tasks) == chunk or pended == len(orders) or len(orders) < chunk:
+                            print(f'Numbers of orders for recordins: {len(tasks)}')
+                            await asyncio.gather(*tasks)
+                            pended += len(tasks)
+                            tasks = []
+            async with pool.acquire() as conn:
+                conn.execute("DELETE FROM orders_table WHERE ctid IN "
+                           "(SELECT ctid FROM (SELECT *, ctid, row_number() OVER "
+                           "(PARTITION BY order_id, status ORDER BY id DESC) FROM "
+                           "orders_table)s WHERE row_number >= 2)"
+                           )
+                print('Deletion of duplicates in the table of goods is completed')
+                conn.execute("DELETE FROM goods_in_orders_table WHERE ctid IN (SELECT ctid FROM"
+                           "(SELECT *, ctid, row_number() OVER (PARTITION BY order_id, sku ORDER BY id DESC) "
+                           "FROM goods_in_orders_table)s WHERE row_number >= 2)"
+                           )
+                print('Deletion of duplicates in the table of orders is completed')
+            if os.path.isfile('orders_ozon_fbo.json'):
+                os.remove('orders_ozon_fbo.json')
+                print('File remove!')
+    except Exception as E:
         print(f'Errors Ozon FBO in main file: {E}')
 
 
@@ -179,4 +207,4 @@ if __name__ == '__main__':
     # call_funcs_send_to_db()
     # removing_duplicates_orders()
     # removing_duplicates_goods_in_order()
-    send_to_db_ozon_fbo()
+    asyncio.get_event_loop().run_until_complete(send_to_db_wb())
