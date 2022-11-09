@@ -1,10 +1,4 @@
 from help_func import params_date, convert_to_date, account_data, connections
-from pprint import pprint
-import asyncio 
-import aiohttp
-import json
-import asyncpg
-import os
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -40,7 +34,7 @@ async def order_params(order, api_id, pool):
             str(order['additional_data']), api_id, 1
         )
     except Exception as e:
-        print(f'Error ozon orders {e}')
+        print(f'Error OZON orders: {e}')
 
 
 async def goods_in_order_params(order, pool):
@@ -94,50 +88,8 @@ async def goods_in_order_params(order, pool):
                 order['products'][n]['name']
             )
     except Exception as e:
-        print(f'Error goods in order: {e}')
-
-
-headers = {
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                  '(KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36',
-    'Content-Type': 'application/json'
-}
-
-
-async def set_to_db() -> None:
-    async with asyncpg.create_pool(
-                    host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
-                    port='6432',
-                    database='market_db',
-                    user=os.environ['DB_LOGIN'],
-                    password=os.environ['DB_PASSWORD'],
-                    ssl='require'
-            ) as pool:   
-        with open('orders_ozon_fbo.json', 'r', encoding='utf-8') as file:
-            orders = json.load(file)
-            tasks = []
-            chunk = 1000
-            for order in orders:
-                tasks.append(await order_params(order, pool))
-                tasks.append(await goods_in_order_params(order, pool))
-            print(tasks)
-            while len(tasks) != 0:
-                print(f'Numbers of orders for recordins: {len(tasks)}')
-                chunk_tasks = tasks[:chunk]
-                await asyncio.gather(*chunk_tasks)
-                tasks = tasks[chunk:]
-            os.remote('')
+        print(f'Error goods in order OZON: {e}')
 
 
 if __name__ == '__main__':
-    account = {
-    '1': {'client_id_api': '155597',
-    'api_key': 'b5e85d8a-e803-433c-ac2f-23bc2c8f8ae6'},
-    '2': {'client_id_api': '43083',
-    'api_key': 'f7c1af71-cd07-4b9a-9abe-fdfdf940db4f'},
-    '3': {'client_id_api': '35291',
-    'api_key': '1421edc2-106f-4ec1-9fce-6f3d6f3dd6d1'},
-    }
-    for key, val in account.items():
-        asyncio.get_event_loop().run_until_complete(set_to_db())
-
+    pass

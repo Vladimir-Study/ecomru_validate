@@ -6,18 +6,19 @@ from pprint import pprint
 from dotenv import load_dotenv
 import asyncio
 import csv
+
 load_dotenv()
 
 
 def connections():
     conn = psycopg2.connect(
-        host='rc1b-itt1uqz8cxhs0c3d.mdb.yandexcloud.net',
-        port='6432',
-        dbname='market_db',
-        user=os.environ['DB_LOGIN'],
-        password=os.environ['DB_PASSWORD'],
-        target_session_attrs='read-write',
-        sslmode='require'
+        host=os.environ['PG_HOST'],
+        port=os.environ['PG_PORT'],
+        dbname=os.environ['PG_DB'],
+        user=os.environ['PG_USER'],
+        password=os.environ['PG_PASSWORD'],
+        target_session_attrs=os.environ['TARGET_SESSION_ATTRS'],
+        sslmode=os.environ['SSLMODE']
     )
     return conn
 
@@ -38,56 +39,46 @@ def convert_to_date(str_date: str):
     return date
 
 
-def account_data(mp_id: int): # 1- ozon, 2-yandex , 3- WB
+def convert_to_date_ya(str_date: str):
+    date = datetime.strptime(str_date, '%Y-%m-%d')
+    return date
+
+
+def account_data(mp_id: int):  # 1- ozon, 2-yandex , 3- WB
     try:
         conn = connections()
         return_dict = {}
         with conn:
             with conn.cursor() as select:
-                text_select = f"SELECT * FROM account_list WHERE mp_id = {mp_id}"
-                select.execute(text_select)
-                select_result_db = select.fetchall()
-                if mp_id == 1:
-                    for line in select_result_db:
-                        if line[9] == 'Active':
-                            if line[6] in [values['api_key'] for values in return_dict.values()]:
-                                continue
-                            else:
-                                return_dict[line[0]] = {'client_id_api': line[5], 'api_key': line[6]}
-                    return return_dict
-                elif mp_id == 2:
-                    for line in select_result_db:
-                        if line[9] == 'Active':
-                            if line[6] in [values['client_id'] for values in return_dict.values()]:
-                                continue
-                            else:
-                                return_dict[line[0]] = {'token': line[5], 'client_id': line[6], 'campaign_id': line[7]}
-                    return return_dict
-                elif mp_id == 3:
-                    for line in select_result_db:
-                        if line[9] == 'Active' and line[12] == 'Active':
-                            return_dict[line[0]] = {'api_key': line[5], 'key': line[6]}
-                        elif line[9] != 'Active' and line[12] == 'Active':
-                            return_dict[line[0]] = {'key': line[6]}
-                        elif line[9] == 'Active' and line[12] != 'Active':
-                            return_dict[line[0]] = {'api_key': line[5]}
-                    return return_dict
+                select_get_account_list = f"SELECT id FROM account_list WHERE mp_id = {mp_id} AND status_1 = 'Active'"
+                select.execute(select_get_account_list)
+                account_id_list = select.fetchall()
+                for account_id in account_id_list:
+                    select_get_account_data = f"SELECT sa.attribute_name, asd.attribute_value " \
+                                              f"FROM account_list al join account_service_data asd " \
+                                              f"on al.id = asd.account_id join  service_attr sa on " \
+                                              f"asd.attribute_id = sa.id where al.id = {account_id[0]};"
+                    select.execute(select_get_account_data)
+                    data_account = select.fetchall()
+                    for data in data_account:
+                        if account_id[0] not in return_dict.keys():
+                            return_dict[account_id[0]] = {data[0]: data[1]}
+                        return_dict[account_id[0]] = {**return_dict[account_id[0]], **{data[0]: data[1]}}
+                return return_dict
     except (Exception, Error) as E:
         print(f'Error in get account data: {E}')
 
 
 feidnames_return_ozon = ['id', 'clearing_id', 'posting_number', 'product_id',
-        'sku', 'status', 'returns_keeping_cost', 'return_reason_name',
-        'return_date', 'quantity', 'product_name', 'price', 
-        'waiting_for_seller_date_time', 'returned_to_seller_date_time', 
-        'last_free_waiting_day', 'is_opened', 'place_id', 'commision_percent',
-        'commisions', 'price_without_commision', 'is_moving', 
-        'moving_to_place_name', 'waiting_for_seller_days', 'picking_amount',
-        'accepted_from_customer_moment', 'picking_tag', 'status_name', 
-        'returned_to_ozon_moment', 'current_place_name', 'dst_place_name',
-        'company_id']
+                         'sku', 'status', 'returns_keeping_cost', 'return_reason_name',
+                         'return_date', 'quantity', 'product_name', 'price',
+                         'waiting_for_seller_date_time', 'returned_to_seller_date_time',
+                         'last_free_waiting_day', 'is_opened', 'place_id', 'commision_percent',
+                         'commisions', 'price_without_commision', 'is_moving',
+                         'moving_to_place_name', 'waiting_for_seller_days', 'picking_amount',
+                         'accepted_from_customer_moment', 'picking_tag', 'status_name',
+                         'returned_to_ozon_moment', 'current_place_name', 'dst_place_name',
+                         'company_id']
 
 if __name__ == '__main__':
-    #res = account_data(3)
-    #pprint(res)
     pass

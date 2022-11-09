@@ -1,5 +1,6 @@
 import requests
-import asyncio 
+import asyncio
+from pprint import pprint
 import aiohttp
 from help_func import params_date
 import json
@@ -30,7 +31,7 @@ async def write_to_file(file_name: str, client_id: str, orders) -> None:
                 api_returns = {client_id: add_orders}
                 returns = {**returns, **api_returns}
                 print(f'Write {len(returns)}')
-                with open('orders_ya.json', 'w', encoding='utf-8') as outfile:
+                with open(f'{file_name}.json', 'w', encoding='utf-8') as outfile:
                     json.dump(returns, outfile, ensure_ascii=False, indent=4)
 
 
@@ -57,10 +58,10 @@ async def parse_ozon_fbo(
         try:
             response_count = 0
             len_orders = 1000
-            parse_count = 0
+            offset = 0
             while response_count != 10 and len_orders == 1000:
-                print('Start while')
-                offset = 0
+                print('Start while OZON FBO')
+                print(f'Response count: {response_count}')
                 print(f'Offset: {offset}')
                 data = {
                     "dir": "asc",
@@ -82,36 +83,9 @@ async def parse_ozon_fbo(
                     if response.status == 200:
                         print('Status code 200!')
                         len_orders = len(orders['result'])
-                        offset += len_orders 
-                        print(offset)
-                        parse_count += len_orders 
-                        print(f"Number of ofders for parsing: {parse_count}")
+                        offset += len_orders
+                        print(f"Number of ofders for parsing: {offset}")
                         await write_to_file('orders_ozon_fbo', api_key, orders['result'])
-                        '''
-                        if not os.path.isfile('orders_ozon_fbo.json'):
-                            print('Not file')
-                            with open('orders_ozon_fbo.json', 'w', encoding='utf-8') as outfile:
-                                api_orders = {api_key: orders['result']}
-                                print(f'Create {len_orders}')
-                                json.dump(api_orders, outfile, ensure_ascii=False, indent=4)
-                        else:
-                            print('File is create')
-                            with open('orders_ozon_fbo.json', 'r', encoding='utf-8') as file:
-                                returns = json.load(file)
-                                if api_key not in returns.keys():
-                                    with open('orders_ozon_fbo.json', 'w', encoding='utf-8') as outfile:
-                                        api_orders = {client_id: orders['result']}
-                                        returns = {**returns, **api_orders}
-                                        print(f'Create {len_orders}')
-                                        json.dump(api_orders, outfile, ensure_ascii=False, indent=4)
-                                else:
-                                    api_returns = {api_key: returns}
-                                    returns = {**returns, **api_orders}
-                                    returns = [*returns[api_key], *orders['result']]
-                                    print(f'Write {len(returns)}')
-                                    with open('orders_ozon_fbo.json', 'w', encoding='utf-8') as outfile:
-                                        json.dump(api_returns, outfile, ensure_ascii=False, indent=4)
-                        '''
                     else:
                         response_count += 1
         except Exception as E:
@@ -245,7 +219,7 @@ async def parse_ya(
         fromDate: str,
         toDate: str,
         ):
-    url = f'https://api.partner.market.yandex.ru/v2/campaigns/{campaign_id}/orders.json'
+    url = f'https://api.partner.market.yandex.ru/v2/campaigns/{campaign_id}/stats/orders.json'
     print(campaign_id)
     ya_headers = {
         'Authorization': f'OAuth oauth_token={token}, oauth_client_id={client_id}',
@@ -255,25 +229,28 @@ async def parse_ya(
     async with aiohttp.ClientSession() as session:
         try:
             response_count = 0
-            page = 1
-            current_page = 10
-            while response_count != 10 and page <= current_page:
+            page_count = 0
+            next_page = ''
+            while response_count != 10:
                 params = {
                     'fromDate': fromDate,
                     'toDate': toDate,
-                    'page': page 
-                        } 
-                async with session.get(url, headers=ya_headers, params=params) as response:
+                    'limit': 200,
+                    'page_token': next_page
+                        }
+                async with session.post(url, headers=ya_headers, params=params) as response:
                     orders = await response.json()
                     if 'errors' in orders.keys():
                         print(orders['errors'][0]['message'])
-                    elif len(orders['orders']) == 0:
-                        print('Numbers of orders in 0')
                     if response.status == 200:
-                        current_page = orders['pager']['pagesCount'] 
-                        page = orders['pager']['currentPage'] + 1
-                        print(f"Number of ofders for parsing: {len(orders['orders'])}")
-                        await write_to_file('orders_ya', client_id, orders['orders'])
+                        if not orders['result']['orders']:
+                            print('Numbers of orders in 0')
+                            break
+                        next_page = orders['result']['paging']['nextPageToken']
+                        print(f"Number of orders for parsing: {len(orders['result']['orders'])}")
+                        page_count += len(orders['result']['orders'])
+                        print(page_count)
+                        await write_to_file('orders_ya', client_id, orders['result']['orders'])
                     else:
                         response_count += 1
         except Exception as E:
