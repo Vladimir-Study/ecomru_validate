@@ -67,12 +67,14 @@ async def send_to_db_ya() -> None:
 
 async def send_to_db_wb() -> None:
     try:
-        wb_account_list = account_data(3)
-        for wb_account in wb_account_list.values():
-            if 'client_id_api' in wb_account:
-                await parse_wb_fbs(wb_account['client_id_api'], date['date_to'], date['date_now'])
-            if 'api_key' in wb_account:
-                await parse_wb_fbo(wb_account['api_key'], date['date_to'])
+        wb_account_list_fbs = account_data(3)
+        wb_account_list_fbo = account_data(15)
+        for wbs_account in wb_account_list_fbs.values():
+            if 'client_id_api' in wbs_account:
+                await parse_wb_fbs(wbs_account['client_id_api'], date['date_to'], date['date_now'])
+        for wbo_account in wb_account_list_fbo.values():
+            if 'api_key' in wbo_account:
+                await parse_wb_fbo(wbo_account['api_key'], date['date_to'])
         async with asyncpg.create_pool(
                 host=os.environ['PG_HOST'],
                 port=os.environ['PG_PORT'],

@@ -44,7 +44,7 @@ def convert_to_date_ya(str_date: str):
     return date
 
 
-def account_data(mp_id: int):  # 1- ozon, 2-yandex , 3- WB
+def account_data(mp_id: int):  # 1- ozon, 2-yandex , 3- WBFBS, 15 - WBFBO
     try:
         conn = connections()
         return_dict = {}
@@ -81,4 +81,5 @@ feidnames_return_ozon = ['id', 'clearing_id', 'posting_number', 'product_id',
                          'company_id']
 
 if __name__ == '__main__':
-    pass
+    date = params_date()
+    pprint(date)
